@@ -35,20 +35,38 @@ func get_repository(owner, repo):
 	return request(HTTPClient.METHOD_GET, "/repos/%s/%s" % [owner, repo])
 
 func get_tree(owner, repo, branch):
-	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/git/trees/%s?recursive=1" % [owner, repo, branch])
+	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/git/trees/%s?recursive=1" % [owner, repo, _escape(branch)])
 
 func get_contents(owner, repo, path, branch):
-	var escaped = path.replace(" ", "%20").replace("#", "%23")
-	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/contents/%s?ref=%s" % [owner, repo, escaped, branch])
+	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/contents/%s?ref=%s" % [owner, repo, _escape_path(path), _escape(branch)])
 
 func put_content(owner, repo, path, content_base64, message, branch, sha = ""):
 	var body = {"message": message, "content": content_base64, "branch": branch}
-	if sha != "": body["sha"] = sha
-	return request(HTTPClient.METHOD_PUT, "/repos/%s/%s/contents/%s" % [owner, repo, path], body)
+	if sha != "":
+		body["sha"] = sha
+	return request(HTTPClient.METHOD_PUT, "/repos/%s/%s/contents/%s" % [owner, repo, _escape_path(path)], body)
 
 func delete_content(owner, repo, path, message, branch, sha):
 	var body = {"message": message, "branch": branch, "sha": sha}
-	return request(HTTPClient.METHOD_DELETE, "/repos/%s/%s/contents/%s" % [owner, repo, path], body)
+	return request(HTTPClient.METHOD_DELETE, "/repos/%s/%s/contents/%s" % [owner, repo, _escape_path(path)], body)
+
+func get_commits(owner, repo, branch = "main", per_page = 20):
+	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/commits?sha=%s&per_page=%d" % [owner, repo, _escape(branch), per_page])
+
+func get_collaborators(owner, repo):
+	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/collaborators" % [owner, repo])
+
+func get_pull_requests(owner, repo, state = "open"):
+	return request(HTTPClient.METHOD_GET, "/repos/%s/%s/pulls?state=%s&per_page=20" % [owner, repo, state])
+
+func _escape(value):
+	return str(value).replace(" ", "%20").replace("#", "%23").replace("/", "%2F")
+
+func _escape_path(value):
+	var parts = str(value).split("/")
+	for i in range(parts.size()):
+		parts[i] = _escape(parts[i])
+	return "/".join(parts)
 
 func _on_http_completed(result, response_code, headers, body):
 	if result != HTTPRequest.RESULT_SUCCESS:
