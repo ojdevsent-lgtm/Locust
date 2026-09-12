@@ -1,5 +1,4 @@
 ; Locust Godot 3 demo project
-; Open the demo folder with Godot 3.x and enable the Locust plugin.
 
 [application]
 config/name="Locust Demo"
@@ -11,7 +10,3 @@ enabled=PoolStringArray("res://../addons/locust/plugin.cfg")
 [display]
 window/size/width=900
 window/size/height=600
-
-[rendering]
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
