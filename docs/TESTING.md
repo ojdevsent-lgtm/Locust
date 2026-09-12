@@ -1,11 +1,12 @@
 # Locust — Godot 3 Testing Checklist
 
-Locust targets Godot 3.x only. Final runtime validation must be performed in a real Godot 3 editor.
+Locust targets **Godot 3.x only**. Final runtime validation must be performed in a real Godot 3 editor.
 
 ## Plugin loading
 - Copy `addons/locust` into a clean Godot 3 project.
 - Enable Locust under Project > Project Settings > Plugins.
 - Confirm the dock appears with no parser errors.
+- Disable and re-enable the plugin and confirm the dock is cleaned up and restored correctly.
 
 ## Repository connection
 - Enter owner, repository, branch, and a GitHub token.
@@ -14,12 +15,14 @@ Locust targets Godot 3.x only. Final runtime validation must be performed in a r
 - Restart the editor and confirm the token is not restored from config.
 
 ## Initial sync
-Use a disposable repository.
+Use a disposable repository or test branch.
 - Local-only file → uploaded.
 - Remote-only file → downloaded.
 - Matching file → unchanged.
 - Snapshot is saved under `.locust/`.
 - A recovery backup exists before local files are changed.
+
+If both the local project and remote repository already contain different files at the same path before a baseline snapshot exists, Locust should stop and ask for conflict resolution rather than silently overwrite either side.
 
 ## Normal sync
 Test local edits, remote edits, local deletion, and remote deletion. Run Sync again and confirm `Project is up to date`.
@@ -39,7 +42,9 @@ Test local edits, remote edits, local deletion, and remote deletion. Run Sync ag
 - A truncated GitHub tree must stop the sync instead of causing false deletions.
 
 ## Large assets
-Use CHECK ASSETS with a multi-megabyte asset. Confirm Locust reports large files and recommends Git LFS where appropriate. Do not use the GitHub Contents API as a replacement for Git LFS for a production asset pipeline.
+Use CHECK ASSETS with a multi-megabyte asset. Confirm Locust reports large files and recommends Git LFS where appropriate.
+
+For large remote files, confirm that Locust falls back to GitHub's raw file endpoint when the Contents API returns no inline content. Do not use the GitHub Contents API as a replacement for Git LFS for a production asset pipeline.
 
 ## Error cases
 Test invalid repository, invalid/expired token, wrong branch, offline connection, and a repository without write access. Locust should show a readable error and stop the current sync queue.
@@ -52,4 +57,5 @@ Test invalid repository, invalid/expired token, wrong branch, offline connection
 - Recovery backup works.
 - Token is not persisted.
 - Path traversal tests pass.
+- Large-file raw download fallback works.
 - No Godot 4-only APIs are introduced.
