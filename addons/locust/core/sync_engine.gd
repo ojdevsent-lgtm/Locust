@@ -177,4 +177,6 @@ func _finish_queue_item():
 	_process_next()
 
 func _save_snapshot():
-	snapshot.save_snapshot({"version": 1, "owner": owner, "repo": repo, "branch": branch, "files": local_map})
+	var files = scanner.scan()
+	var current = snapshot.build(files, scanner)
+	snapshot.save_snapshot({"version": 1, "owner": owner, "repo": repo, "branch": branch, "files": current})
