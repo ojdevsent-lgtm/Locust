@@ -80,7 +80,8 @@ func resolve_conflicts(paths, keep_local):
 	var remaining = []
 	var selected = {}
 	for path in paths:
-		selected[path] = true
+		if scanner.is_safe_project_path(path):
+			selected[path] = true
 	for path in plan.get("conflicts", []):
 		if not selected.has(path):
 			remaining.append(path)
@@ -94,14 +95,7 @@ func resolve_conflicts(paths, keep_local):
 		emit_signal("conflicts_found", remaining)
 		emit_signal("status_changed", "%d conflict(s) still need review" % remaining.size())
 		return
-	queue = []
-	for path in plan.download: queue.append({"op": "download", "path": path})
-	for path in plan.upload: queue.append({"op": "upload", "path": path})
-	for path in plan.delete_remote: queue.append({"op": "delete_remote", "path": path})
-	for path in plan.delete_local: queue.append({"op": "delete_local", "path": path})
-	queue_index = 0
-	operation_total = queue.size()
-	_process_next()
+	_start_queue()
 
 func _on_github_response(success, data, error_message):
 	if not success:
@@ -128,10 +122,18 @@ func _on_github_response(success, data, error_message):
 func _start_plan(tree):
 	remote_map = {}
 	remote_entries = {}
-	if typeof(tree) == TYPE_DICTIONARY:
-		for entry in tree.get("tree", []):
-			if entry.get("type", "") == "blob":
-				var path = str(entry.get("path", ""))
+	if typeof(tree) != TYPE_DICTIONARY:
+		emit_signal("sync_finished", false, {"error": "GitHub returned an invalid repository tree"})
+		pending = ""
+		return
+	if tree.get("truncated", false):
+		emit_signal("sync_finished", false, {"error": "GitHub returned a truncated repository tree. Locust stopped to avoid an incomplete sync."})
+		pending = ""
+		return
+	for entry in tree.get("tree", []):
+		if entry.get("type", "") == "blob":
+			var path = str(entry.get("path", ""))
+			if scanner.is_safe_project_path(path):
 				remote_map[path] = str(entry.get("sha", ""))
 				remote_entries[path] = entry
 	var files = scanner.scan()
@@ -145,11 +147,18 @@ func _start_plan(tree):
 		emit_signal("sync_finished", false, {"conflicts": result.conflicts})
 		pending = ""
 		return
+	_start_queue()
+
+func _start_queue():
 	queue = []
-	for path in result.download: queue.append({"op": "download", "path": path})
-	for path in result.upload: queue.append({"op": "upload", "path": path})
-	for path in result.delete_remote: queue.append({"op": "delete_remote", "path": path})
-	for path in result.delete_local: queue.append({"op": "delete_local", "path": path})
+	for path in plan.get("download", []):
+		if scanner.is_safe_project_path(path): queue.append({"op": "download", "path": path})
+	for path in plan.get("upload", []):
+		if scanner.is_safe_project_path(path): queue.append({"op": "upload", "path": path})
+	for path in plan.get("delete_remote", []):
+		if scanner.is_safe_project_path(path): queue.append({"op": "delete_remote", "path": path})
+	for path in plan.get("delete_local", []):
+		if scanner.is_safe_project_path(path): queue.append({"op": "delete_local", "path": path})
 	queue_index = 0
 	operation_total = queue.size()
 	if queue.empty():
@@ -160,7 +169,7 @@ func _start_plan(tree):
 		pending = ""
 		return
 	# Preserve a local recovery point before modifying project files.
-	recovery.create_backup(files, scanner)
+	recovery.create_backup(scanner.scan(), scanner)
 	_process_next()
 
 func _process_next():
@@ -181,7 +190,9 @@ func _process_next():
 		"upload":
 			var data = scanner.read_file(pending_path)
 			if data == null:
-				_finish_queue_item()
+				emit_signal("status_changed", "Could not read " + pending_path)
+				emit_signal("sync_finished", false, {"error": "Could not read " + pending_path})
+				pending = ""
 				return
 			var content = Marshalls.raw_to_base64(data)
 			var sha = remote_map.get(pending_path, "")
@@ -189,16 +200,21 @@ func _process_next():
 		"delete_remote":
 			var sha = remote_map.get(pending_path, "")
 			if sha == "":
+				emit_signal("status_changed", "Remote file already absent: " + pending_path)
 				_finish_queue_item()
 				return
 			github.delete_content(owner, repo, pending_path, "Locust: delete " + pending_path, branch, sha)
 		"delete_local":
-			scanner.delete_file(pending_path)
+			if not scanner.delete_file(pending_path):
+				emit_signal("sync_finished", false, {"error": "Could not delete " + pending_path})
+				pending = ""
+				return
 			_finish_queue_item()
 
 func _handle_download(data):
 	if typeof(data) != TYPE_DICTIONARY:
-		_finish_queue_item()
+		emit_signal("sync_finished", false, {"error": "GitHub returned invalid file data for " + pending_path})
+		pending = ""
 		return
 	var encoded = str(data.get("content", "")).replace("\n", "")
 	if encoded == "":
@@ -218,6 +234,5 @@ func _finish_queue_item():
 	_process_next()
 
 func _save_snapshot():
-	# Re-scan after operations so the next comparison is based on actual disk state.
 	local_map = snapshot.build(scanner.scan(), scanner)
 	snapshot.save_snapshot({"version": 1, "owner": owner, "repo": repo, "branch": branch, "files": local_map})
