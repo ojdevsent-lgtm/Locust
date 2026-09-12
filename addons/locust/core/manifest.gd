@@ -1,7 +1,7 @@
 tool
 extends Reference
 
-const VERSION = "0.3.2"
+const VERSION = "0.3.3"
 const GODOT_MAJOR = 3
 const PRODUCT = "Locust"
 
