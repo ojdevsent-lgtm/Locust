@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 - Safety hardening
+
+- Added `.import` to the default scanner ignore set
+- Added project-path validation against absolute and parent-directory traversal
+- Stopped synchronization when GitHub reports a truncated repository tree
+- Added validation for remote paths before local writes/deletes
+- Added safer queue error handling for unreadable local files
+- Added Godot 3 release testing checklist
+
 ## 0.3.0 - Complete core development build
 
 - Added Godot 3 editor dock workflow
