@@ -1,0 +1,7 @@
+[gd_scene format=2]
+
+[node name="LocustDemo" type="Node2D"]
+
+[node name="Info" type="Label" parent="."]
+position = Vector2(40, 40)
+text = "Locust Demo — Godot 3\nOpen the Locust dock from the Editor."
