@@ -112,6 +112,8 @@ func _on_github_response(success, data, error_message):
 			_start_plan(data)
 		"download":
 			_handle_download(data)
+		"download_raw":
+			_handle_raw_download(data)
 		"upload":
 			_finish_queue_item()
 		"delete_remote":
@@ -217,11 +219,27 @@ func _handle_download(data):
 		pending = ""
 		return
 	var encoded = str(data.get("content", "")).replace("\n", "")
+	# GitHub's Contents API may return encoding=none with empty content for large files.
 	if encoded == "":
+		if str(data.get("download_url", "")) != "":
+			pending = "download_raw"
+			emit_signal("status_changed", "Downloading large file: " + pending_path)
+			github.get_raw_contents(owner, repo, pending_path, branch)
+			return
 		emit_signal("sync_finished", false, {"error": "GitHub did not return file content for " + pending_path})
 		pending = ""
 		return
 	var bytes = Marshalls.base64_to_raw(encoded)
+	_write_download(bytes)
+
+func _handle_raw_download(data):
+	if typeof(data) != TYPE_RAW_ARRAY:
+		emit_signal("sync_finished", false, {"error": "GitHub returned invalid raw data for " + pending_path})
+		pending = ""
+		return
+	_write_download(data)
+
+func _write_download(bytes):
 	if scanner.write_file(pending_path, bytes):
 		_finish_queue_item()
 	else:
