@@ -4,12 +4,14 @@ extends Node
 signal status_changed(text)
 signal sync_finished(success, summary)
 signal conflicts_found(paths)
+signal backup_created(path)
 
 const GithubClient = preload("res://addons/locust/core/github_client.gd")
 const Scanner = preload("res://addons/locust/core/project_scanner.gd")
 const Snapshot = preload("res://addons/locust/core/snapshot.gd")
 const Conflicts = preload("res://addons/locust/core/conflicts.gd")
 const Activity = preload("res://addons/locust/core/activity.gd")
+const Recovery = preload("res://addons/locust/core/recovery.gd")
 
 var http
 var github
@@ -17,6 +19,7 @@ var scanner
 var snapshot
 var conflicts
 var activity
+var recovery
 var owner = ""
 var repo = ""
 var branch = "main"
@@ -30,7 +33,6 @@ var queue = []
 var queue_index = 0
 var pending = ""
 var pending_path = ""
-var pending_sha = ""
 
 func _ready():
 	http = HTTPRequest.new()
@@ -42,6 +44,7 @@ func _ready():
 	snapshot = Snapshot.new()
 	conflicts = Conflicts.new()
 	activity = Activity.new()
+	recovery = Recovery.new()
 
 func configure(p_owner, p_repo, p_branch = "main", p_token = ""):
 	owner = p_owner.strip_edges()
@@ -86,8 +89,6 @@ func _on_github_response(success, data, error_message):
 			_finish_queue_item()
 		"delete_remote":
 			_finish_queue_item()
-		"delete_local":
-			_finish_queue_item()
 
 func _start_plan(tree):
 	remote_map = {}
@@ -109,6 +110,10 @@ func _start_plan(tree):
 		emit_signal("sync_finished", false, {"conflicts": result.conflicts})
 		pending = ""
 		return
+	var backup = recovery.create_backup(files, scanner)
+	if backup != "":
+		emit_signal("backup_created", backup)
+		activity.add("Created recovery backup", "backup")
 	queue = []
 	for path in result.download: queue.append({"op": "download", "path": path})
 	for path in result.upload: queue.append({"op": "upload", "path": path})
