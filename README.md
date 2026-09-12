@@ -1,61 +1,64 @@
 # Locust
 
-Locust is a free and open-source Godot 3 editor plugin that makes GitHub collaboration feel like part of the Godot editor instead of a terminal workflow.
+Locust is a free and open-source **Godot 3** editor plugin that makes GitHub collaboration feel like part of the Godot editor instead of a terminal workflow.
 
-## Current build
+## What is included
 
-Locust currently includes:
-
-- Godot 3 editor plugin integration
-- GitHub repository connection
+- Godot 3 editor plugin and dock UI
+- GitHub repository connection and branch selection
 - In-editor GitHub token entry (kept in memory)
-- Project file scanning and ignore rules
-- Git-compatible file snapshots
-- One-click synchronization
-- Upload and download of project files through GitHub
-- Remote deletion and local deletion handling
+- Project scanning with configurable ignore rules
+- Git-compatible file snapshots for three-way change detection
+- One-click synchronization through GitHub's API
+- Upload, download, local deletion and remote deletion handling
 - Automatic conflict detection
-- Automatic recovery backup before synchronization
-- Local activity history
-- Project configuration stored under `.locust`
+- In-editor conflict choice: **Keep Mine** or **Use GitHub**
+- Automatic local recovery backup before a modifying sync
+- Persistent local activity history
+- Large-asset inspection and Git LFS guidance
+- Optional local Git command integration for environments that already have Git installed
+- Demo Godot 3 project
+- Architecture and security documentation
 
-## Roadmap
+## How synchronization works
 
-- Guided conflict resolution UI
-- GitHub commit/history browser
-- Team activity and contributor information
-- Large-asset/LFS-aware workflows
-- Milestones and named restore points
-- Better first-time repository setup
-- Godot Asset Library release
+Locust compares three states:
 
-## Compatibility
+1. **Local** — the files currently on disk.
+2. **Base** — the last Locust snapshot.
+3. **Remote** — the selected GitHub branch.
 
-**Godot 3.x only.** Godot 4 is intentionally not supported.
+If only one side changed, Locust synchronizes automatically. If both sides changed the same path differently, Locust stops and asks the developer to choose which version should win.
+
+Before a modifying synchronization, Locust creates a local recovery backup under `.locust/backups/`.
 
 ## Installation
 
-Copy `addons/locust` into a Godot 3 project and enable **Locust** under **Project > Project Settings > Plugins**.
+1. Copy `addons/locust` into a Godot 3 project.
+2. Open **Project > Project Settings > Plugins**.
+3. Enable **Locust**.
+4. Enter the GitHub owner, repository, branch and an appropriate GitHub access token.
+5. Select **CHECK REPOSITORY**, then **SYNC PROJECT**.
 
-## GitHub access
+The `demo/` folder contains a minimal Godot 3 project for trying the plugin.
 
-Locust communicates with GitHub through its REST API. A GitHub access token is required for repository writes and private repositories. The current editor UI keeps the token in memory rather than writing it to the project configuration.
+## Security
 
-Never commit a personal access token to a project or Git repository.
+Locust does not save the GitHub access token in `.locust/config.json`. The token is kept in memory for the current editor session. Use the minimum GitHub permissions required for the repositories you manage.
 
-## Sync model
+Local Locust state and recovery files are ignored by the repository's `.gitignore`.
 
-Locust tracks a local snapshot of the last synchronized project state. During synchronization it compares:
+## Large assets
 
-1. The local project
-2. The last Locust snapshot
-3. The GitHub branch
+GitHub's Contents API is intended for normal repository files, not as a replacement for Git LFS. Locust detects large files and warns when LFS is appropriate. See `docs/ARCHITECTURE.md` for the current architecture and `docs/SECURITY.md` for security notes.
 
-When both local and remote sides changed the same file since the last synchronized state, Locust reports a conflict instead of silently overwriting work.
+## Compatibility
 
-## Development
+**Godot 3.x only.** Godot 4 is intentionally not supported by this project.
 
-Locust is free/open-source and intentionally lightweight. The goal is to hide Git complexity behind a focused Godot editor workflow while retaining GitHub as the collaboration backend.
+## Project status
+
+This is an early open-source release. The architecture and core workflows are implemented, but the final validation must be performed inside a real Godot 3 installation across different project types and GitHub repository configurations.
 
 ## License
 
