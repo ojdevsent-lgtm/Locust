@@ -1,11 +1,12 @@
 tool
 extends Reference
 
-const DEFAULT_IGNORES = [".git", ".godot", ".locust", "*.tmp", "*.log"]
+const DEFAULT_IGNORES = [".git", ".godot", ".import", ".locust", "*.tmp", "*.log"]
 
 func scan(root = "res://", ignores = DEFAULT_IGNORES):
 	var files = []
 	_scan_dir(root, root, ignores, files)
+	files.sort()
 	return files
 
 func _scan_dir(base, path, ignores, output):
@@ -47,7 +48,18 @@ func _ignored(full, base, name, is_dir, ignores):
 			return true
 	return false
 
+func is_safe_project_path(path):
+	var value = str(path).replace("\\", "/")
+	if value == "" or value.begins_with("/") or value.find(":") >= 0:
+		return false
+	for part in value.split("/"):
+		if part == "..":
+			return false
+	return true
+
 func read_file(path):
+	if not is_safe_project_path(path):
+		return null
 	var file = File.new()
 	if file.open("res://" + path, File.READ) != OK:
 		return null
@@ -56,6 +68,8 @@ func read_file(path):
 	return data
 
 func write_file(path, data):
+	if not is_safe_project_path(path):
+		return false
 	var full = "res://" + path
 	var dir = Directory.new()
 	var parent = full.get_base_dir()
@@ -69,5 +83,7 @@ func write_file(path, data):
 	return true
 
 func delete_file(path):
+	if not is_safe_project_path(path):
+		return false
 	var dir = Directory.new()
 	return dir.remove("res://" + path) == OK
