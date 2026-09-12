@@ -4,7 +4,6 @@ extends Node
 signal status_changed(text)
 signal sync_finished(success, summary)
 signal conflicts_found(paths)
-signal backup_created(path)
 
 const GithubClient = preload("res://addons/locust/core/github_client.gd")
 const Scanner = preload("res://addons/locust/core/project_scanner.gd")
@@ -12,6 +11,7 @@ const Snapshot = preload("res://addons/locust/core/snapshot.gd")
 const Conflicts = preload("res://addons/locust/core/conflicts.gd")
 const Activity = preload("res://addons/locust/core/activity.gd")
 const Recovery = preload("res://addons/locust/core/recovery.gd")
+const Assets = preload("res://addons/locust/core/asset_manager.gd")
 
 var http
 var github
@@ -20,6 +20,7 @@ var snapshot
 var conflicts
 var activity
 var recovery
+var assets
 var owner = ""
 var repo = ""
 var branch = "main"
@@ -33,6 +34,8 @@ var queue = []
 var queue_index = 0
 var pending = ""
 var pending_path = ""
+var pending_sha = ""
+var operation_total = 0
 
 func _ready():
 	http = HTTPRequest.new()
@@ -45,12 +48,13 @@ func _ready():
 	conflicts = Conflicts.new()
 	activity = Activity.new()
 	recovery = Recovery.new()
+	assets = Assets.new()
 
 func configure(p_owner, p_repo, p_branch = "main", p_token = ""):
-	owner = p_owner.strip_edges()
-	repo = p_repo.strip_edges()
-	branch = p_branch.strip_edges() if p_branch.strip_edges() != "" else "main"
-	token = p_token.strip_edges()
+	owner = str(p_owner).strip_edges()
+	repo = str(p_repo).strip_edges()
+	branch = str(p_branch).strip_edges() if str(p_branch).strip_edges() != "" else "main"
+	token = str(p_token).strip_edges()
 	github.set_token(token)
 
 func connect_repository():
@@ -69,6 +73,35 @@ func sync_project():
 	pending = "tree"
 	emit_signal("status_changed", "Reading project changes…")
 	github.get_tree(owner, repo, branch)
+
+func resolve_conflicts(paths, keep_local):
+	if plan.empty():
+		return
+	var remaining = []
+	var selected = {}
+	for path in paths:
+		selected[path] = true
+	for path in plan.get("conflicts", []):
+		if not selected.has(path):
+			remaining.append(path)
+		else:
+			if keep_local:
+				plan.upload.append(path)
+			else:
+				plan.download.append(path)
+	plan.conflicts = remaining
+	if remaining.size() > 0:
+		emit_signal("conflicts_found", remaining)
+		emit_signal("status_changed", "%d conflict(s) still need review" % remaining.size())
+		return
+	queue = []
+	for path in plan.download: queue.append({"op": "download", "path": path})
+	for path in plan.upload: queue.append({"op": "upload", "path": path})
+	for path in plan.delete_remote: queue.append({"op": "delete_remote", "path": path})
+	for path in plan.delete_local: queue.append({"op": "delete_local", "path": path})
+	queue_index = 0
+	operation_total = queue.size()
+	_process_next()
 
 func _on_github_response(success, data, error_message):
 	if not success:
@@ -89,6 +122,8 @@ func _on_github_response(success, data, error_message):
 			_finish_queue_item()
 		"delete_remote":
 			_finish_queue_item()
+		"delete_local":
+			_finish_queue_item()
 
 func _start_plan(tree):
 	remote_map = {}
@@ -104,22 +139,19 @@ func _start_plan(tree):
 	var result = conflicts.classify(local_map, remote_map, base_snapshot)
 	plan = result
 	if result.conflicts.size() > 0:
-		activity.add("Sync stopped: %d conflict(s) detected" % result.conflicts.size(), "conflict")
+		activity.add("Sync paused: %d conflict(s) detected" % result.conflicts.size(), "conflict")
 		emit_signal("conflicts_found", result.conflicts)
 		emit_signal("status_changed", "%d conflict(s) need review" % result.conflicts.size())
 		emit_signal("sync_finished", false, {"conflicts": result.conflicts})
 		pending = ""
 		return
-	var backup = recovery.create_backup(files, scanner)
-	if backup != "":
-		emit_signal("backup_created", backup)
-		activity.add("Created recovery backup", "backup")
 	queue = []
 	for path in result.download: queue.append({"op": "download", "path": path})
 	for path in result.upload: queue.append({"op": "upload", "path": path})
 	for path in result.delete_remote: queue.append({"op": "delete_remote", "path": path})
 	for path in result.delete_local: queue.append({"op": "delete_local", "path": path})
 	queue_index = 0
+	operation_total = queue.size()
 	if queue.empty():
 		_save_snapshot()
 		activity.add("Project already synchronized", "sync")
@@ -127,36 +159,41 @@ func _start_plan(tree):
 		emit_signal("sync_finished", true, {"changed": 0})
 		pending = ""
 		return
+	# Preserve a local recovery point before modifying project files.
+	recovery.create_backup(files, scanner)
 	_process_next()
 
 func _process_next():
 	if queue_index >= queue.size():
 		_save_snapshot()
-		activity.add("Sync completed: %d operation(s)" % queue.size(), "sync")
-		emit_signal("status_changed", "Sync complete — %d operation(s)" % queue.size())
-		emit_signal("sync_finished", true, {"changed": queue.size()})
+		activity.add("Sync completed: %d operation(s)" % operation_total, "sync")
+		emit_signal("status_changed", "Sync complete — %d operation(s)" % operation_total)
+		emit_signal("sync_finished", true, {"changed": operation_total})
 		pending = ""
 		return
 	var item = queue[queue_index]
-	pending = item.op
-	pending_path = item.path
-	emit_signal("status_changed", "%s: %s" % [item.op.capitalize(), item.path])
-	match item.op:
+	pending = item["op"]
+	pending_path = item["path"]
+	emit_signal("status_changed", "%s: %s" % [str(item["op"]).capitalize(), pending_path])
+	match item["op"]:
 		"download":
-			github.get_contents(owner, repo, item.path, branch)
+			github.get_contents(owner, repo, pending_path, branch)
 		"upload":
-			var data = scanner.read_file(item.path)
+			var data = scanner.read_file(pending_path)
 			if data == null:
 				_finish_queue_item()
 				return
 			var content = Marshalls.raw_to_base64(data)
-			var sha = remote_map.get(item.path, "")
-			github.put_content(owner, repo, item.path, content, "Locust: update " + item.path, branch, sha)
+			var sha = remote_map.get(pending_path, "")
+			github.put_content(owner, repo, pending_path, content, "Locust: update " + pending_path, branch, sha)
 		"delete_remote":
-			var sha = remote_map.get(item.path, "")
-			github.delete_content(owner, repo, item.path, "Locust: delete " + item.path, branch, sha)
+			var sha = remote_map.get(pending_path, "")
+			if sha == "":
+				_finish_queue_item()
+				return
+			github.delete_content(owner, repo, pending_path, "Locust: delete " + pending_path, branch, sha)
 		"delete_local":
-			scanner.delete_file(item.path)
+			scanner.delete_file(pending_path)
 			_finish_queue_item()
 
 func _handle_download(data):
@@ -164,6 +201,10 @@ func _handle_download(data):
 		_finish_queue_item()
 		return
 	var encoded = str(data.get("content", "")).replace("\n", "")
+	if encoded == "":
+		emit_signal("sync_finished", false, {"error": "GitHub did not return file content for " + pending_path})
+		pending = ""
+		return
 	var bytes = Marshalls.base64_to_raw(encoded)
 	if scanner.write_file(pending_path, bytes):
 		_finish_queue_item()
@@ -177,6 +218,6 @@ func _finish_queue_item():
 	_process_next()
 
 func _save_snapshot():
-	var files = scanner.scan()
-	var current = snapshot.build(files, scanner)
-	snapshot.save_snapshot({"version": 1, "owner": owner, "repo": repo, "branch": branch, "files": current})
+	# Re-scan after operations so the next comparison is based on actual disk state.
+	local_map = snapshot.build(scanner.scan(), scanner)
+	snapshot.save_snapshot({"version": 1, "owner": owner, "repo": repo, "branch": branch, "files": local_map})
