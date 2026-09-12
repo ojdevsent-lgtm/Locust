@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 - Sync robustness
+
+- Improved GitHub URL/path percent-encoding for repository, branch, and file paths
+- Added raw GitHub file downloads for large files when the Contents API does not return inline content
+- Added large-file fallback coverage to the Godot 3 testing checklist
+
 ## 0.3.1 - Safety hardening
 
 - Added `.import` to the default scanner ignore set
@@ -25,7 +31,7 @@
 - Added Godot 3 demo project
 - Added architecture and security documentation
 - Added conflict classification test fixture
-- Hardened GitHub URL/path handling
+- Added hardened GitHub URL/path handling
 - Expanded README and installation guidance
 
 ## 0.2.0
