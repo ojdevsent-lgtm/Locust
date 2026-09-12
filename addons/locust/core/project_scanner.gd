@@ -1,7 +1,7 @@
 tool
 extends Reference
 
-const DEFAULT_IGNORES = [".git", ".godot", ".locust/cache", "*.tmp", "*.log"]
+const DEFAULT_IGNORES = [".git", ".godot", ".locust", "*.tmp", "*.log"]
 
 func scan(root = "res://", ignores = DEFAULT_IGNORES):
 	var files = []
@@ -40,8 +40,8 @@ func _ignored(full, base, name, is_dir, ignores):
 		if rule.ends_with("/") and rel.begins_with(rule):
 			return true
 		if rule.find("*") >= 0:
-			var ext = rule.replace("*", "")
-			if ext != "" and rel.ends_with(ext):
+			var suffix = rule.replace("*", "")
+			if suffix != "" and rel.ends_with(suffix):
 				return true
 		elif name == rule or rel == rule or rel.begins_with(rule + "/"):
 			return true
