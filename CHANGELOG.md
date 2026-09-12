@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 - Release hardening
+
+- Aligned the plugin and manifest version with the current 0.3.x release line
+- Hardened recovery backup naming and restore path validation
+- Rejected uploads over GitHub's 100 MB file limit with a clear Git LFS message
+
 ## 0.3.2 - Sync robustness
 
 - Improved GitHub URL/path percent-encoding for repository, branch, and file paths
