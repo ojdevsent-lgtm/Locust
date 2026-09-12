@@ -13,6 +13,8 @@ const Activity = preload("res://addons/locust/core/activity.gd")
 const Recovery = preload("res://addons/locust/core/recovery.gd")
 const Assets = preload("res://addons/locust/core/asset_manager.gd")
 
+const MAX_GITHUB_CONTENT_BYTES = 100 * 1024 * 1024
+
 var http
 var github
 var scanner
@@ -34,7 +36,6 @@ var queue = []
 var queue_index = 0
 var pending = ""
 var pending_path = ""
-var pending_sha = ""
 var operation_total = 0
 
 func _ready():
@@ -194,6 +195,13 @@ func _process_next():
 			if data == null:
 				emit_signal("status_changed", "Could not read " + pending_path)
 				emit_signal("sync_finished", false, {"error": "Could not read " + pending_path})
+				pending = ""
+				return
+			if data.size() > MAX_GITHUB_CONTENT_BYTES:
+				var message = "%s is larger than GitHub's 100 MB file limit. Use Git LFS for this asset." % pending_path
+				activity.add(message, "asset")
+				emit_signal("status_changed", message)
+				emit_signal("sync_finished", false, {"error": message})
 				pending = ""
 				return
 			var content = Marshalls.raw_to_base64(data)
